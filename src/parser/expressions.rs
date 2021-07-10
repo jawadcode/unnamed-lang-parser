@@ -14,16 +14,19 @@ trait Operator {
 }
 
 impl Operator for TokenKind {
-    fn prefix_binding_power(&self) -> ((), u8) {
-        match self {
+    fn prefix_binding_power(&self) -> Option<((), u8)> {
+        Some(match self {
             TokenKind::Minus => ((), 51),
             TokenKind::LogicalNot => ((), 101),
-            _ => unreachable!("Not a prefix operator: {:?}"),
-        }
+            _ => {
+                return None;
+                // unreachable!("Not a prefix operator: {:?}")#
+            }
+        })
     }
 
     fn infix_binding_power(&self) -> Option<(u8, u8)> {
-        let result = match self {
+        Some(match self {
             TokenKind::LogicalOr => (1, 2),
             TokenKind::LogicalAnd => (3, 4),
             TokenKind::Equals | TokenKind::NotEq => (5, 6),
@@ -34,16 +37,14 @@ impl Operator for TokenKind {
             TokenKind::Multiply | TokenKind::Divide => (11, 12),
             // TokenKind::Exponent => (22, 21),
             _ => return None,
-        };
-        Some(result)
+        })
     }
 
     fn postfix_binding_power(&self) -> Option<(u8, ())> {
-        let result = match self {
+        Some(match self {
             // TokenKind::Propagate => (101, ()),
             _ => return None,
-        };
-        Some(result)
+        })
     }
 }
 
@@ -51,18 +52,18 @@ impl<'input, I> Parser<'input, I>
 where
     I: Iterator<Item = Token>,
 {
-    pub fn parse_expression(&mut self, binding_power: u8) -> ast::Expr {
+    pub fn parse_expression(&mut self, binding_power: u8) -> Option<ast::Expr> {
         let mut lhs = match self.peek() {
             // Parse int, float and string literals
             lit @ TokenKind::IntLit | lit @ TokenKind::FloatLit | lit @ TokenKind::StringLit => {
-                self.parse_literal(lit)
+                self.parse_literal(lit)?
             }
 
             // Parse identifier or function invocation
-            TokenKind::Ident => self.parse_identifier(),
+            TokenKind::Ident => self.parse_identifier()?,
 
             // Parse grouping
-            TokenKind::LeftParen => self.parse_grouping(),
+            TokenKind::LeftParen => self.parse_grouping()?,
 
             // Parse prefix operator + expression (`op` holds the matched `TokenType`)
             op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op),
@@ -70,7 +71,7 @@ where
         };
 
         loop {
-            let op = match self.peek() {
+            let op = match self.peek()? {
                 op @ TokenKind::Plus
                 | op @ TokenKind::Minus
                 | op @ TokenKind::Multiply
@@ -86,7 +87,10 @@ where
                 | op @ TokenKind::Equals => op,
                 TokenKind::EOF => break,
                 TokenKind::RightParen | TokenKind::Delimiter => break,
-                kind => panic!("Unknown operator: `{}`", kind),
+                kind => {
+                    // panic!("Unknown operator: `{}`", kind)
+                    return None;
+                }
             };
 
             if let Some((left_binding_power, ())) = op.postfix_binding_power() {
@@ -115,7 +119,7 @@ where
                 }
 
                 self.consume(op);
-                let rhs = self.parse_expression(right_binding_power);
+                let rhs = self.parse_expression(right_binding_power)?;
                 lhs = ast::Expr::InfixOp {
                     op,
                     lhs: Box::new(lhs),
@@ -128,28 +132,23 @@ where
             break;
         }
 
-        lhs
+        Some(lhs)
     }
 
     #[inline(always)]
-    fn parse_literal(&mut self, lit: TokenKind) -> ast::Expr {
+    fn parse_literal(&mut self, lit: TokenKind) -> Option<ast::Expr> {
         let literal_text = {
             // Consume the literal and get the text for it
-            let literal_token = self.next().unwrap();
+            let literal_token = self.next()?;
             self.text(literal_token)
         };
         let lit = match lit {
             TokenKind::IntLit => ast::Lit::Int(
                 literal_text
                     // Laziness at its peak:
-                    .parse()
-                    .expect(&format!("Invalid integer literal '{}'", literal_text)),
+                    .parse()?,
             ),
-            TokenKind::FloatLit => ast::Lit::Float(
-                literal_text
-                    .parse()
-                    .expect(&format!("Invalid float literal '{}'", literal_text)),
-            ),
+            TokenKind::FloatLit => ast::Lit::Float(literal_text.parse()?),
             TokenKind::StringLit => ast::Lit::String(
                 // Trim the quotes
                 literal_text[1..(literal_text.len() - 1)].to_string(),
@@ -157,16 +156,17 @@ where
             _ => unreachable!(),
         };
 
-        ast::Expr::Literal(lit)
+        Some(ast::Expr::Literal(lit))
     }
 
     #[inline(always)]
-    fn parse_identifier(&mut self) -> ast::Expr {
+    fn parse_identifier(&mut self) -> Option<ast::Expr> {
         let name = {
-            let ident_token = self.next().unwrap();
+            let ident_token = self.next()?;
             self.text(ident_token).to_string()
         };
-        if !self.at(TokenKind::LeftParen) {
+
+        Some(if !self.at(TokenKind::LeftParen) {
             // Plain identifier
             ast::Expr::Ident(name)
         } else {
@@ -179,7 +179,7 @@ where
             }
 
             ast::Expr::FnCall { name, args }
-        }
+        })
     }
 
     #[inline(always)]
@@ -193,14 +193,14 @@ where
     }
 
     #[inline(always)]
-    fn parse_prefix_op(&mut self, op: TokenKind) -> ast::Expr {
+    fn parse_prefix_op(&mut self, op: TokenKind) -> Option<ast::Expr> {
         self.consume(op);
-        let ((), right_binding_power) = op.prefix_binding_power();
-        let expr = self.parse_expression(right_binding_power);
-        ast::Expr::PrefixOp {
+        let ((), right_binding_power) = op.prefix_binding_power()?;
+        let expr = self.parse_expression(right_binding_power)?;
+        Some(ast::Expr::PrefixOp {
             op,
             expr: Box::new(expr),
-        }
+        })
     }
 
     pub fn expression(&mut self) -> ast::Expr {
