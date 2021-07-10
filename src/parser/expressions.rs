@@ -58,47 +58,14 @@ where
                 self.parse_literal(lit)
             }
 
-            TokenKind::Ident => {
-                let name = {
-                    let ident_token = self.next().unwrap();
-                    self.text(ident_token).to_string()
-                };
-                if !self.at(TokenKind::LeftParen) {
-                    // Plain identifier
-                    ast::Expr::Ident(name)
-                } else {
-                    // Function call
-                    let mut args = Vec::new();
-                    // Consoom parens and function arguments
-                    while !self.at(TokenKind::Delimiter) {
-                        let arg = self.parse_expression(0);
-                        args.push(arg);
-                    }
-
-                    ast::Expr::FnCall { name, args }
-                }
-            }
+            // Parse identifier or function invocation
+            TokenKind::Ident => self.parse_identifier(),
 
             // Parse grouping
-            TokenKind::LeftParen => {
-                // No special AST node, just influences the structure by evaluating the expression
-                // within the parens first
-                self.consume(TokenKind::LeftParen);
-                let expr = self.parse_expression(0);
-                self.consume(TokenKind::RightParen);
-                expr
-            }
+            TokenKind::LeftParen => self.parse_grouping(),
 
             // Parse prefix operator + expression (`op` holds the matched `TokenType`)
-            op @ TokenKind::Minus | op @ TokenKind::LogicalNot => {
-                self.consume(op);
-                let ((), right_binding_power) = op.prefix_binding_power();
-                let expr = self.parse_expression(right_binding_power);
-                ast::Expr::PrefixOp {
-                    op,
-                    expr: Box::new(expr),
-                }
-            }
+            op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op),
             _ => todo!(),
         };
 
@@ -191,6 +158,49 @@ where
         };
 
         ast::Expr::Literal(lit)
+    }
+
+    #[inline(always)]
+    fn parse_identifier(&mut self) -> ast::Expr {
+        let name = {
+            let ident_token = self.next().unwrap();
+            self.text(ident_token).to_string()
+        };
+        if !self.at(TokenKind::LeftParen) {
+            // Plain identifier
+            ast::Expr::Ident(name)
+        } else {
+            // Function call
+            let mut args = Vec::new();
+            // Consoom parens and function arguments
+            while !self.at(TokenKind::Delimiter) {
+                let arg = self.parse_expression(0);
+                args.push(arg);
+            }
+
+            ast::Expr::FnCall { name, args }
+        }
+    }
+
+    #[inline(always)]
+    fn parse_grouping(&mut self) -> ast::Expr {
+        // No special AST node, just influences the structure by evaluating the expression
+        // within the parens first
+        self.consume(TokenKind::LeftParen);
+        let expr = self.parse_expression(0);
+        self.consume(TokenKind::RightParen);
+        expr
+    }
+
+    #[inline(always)]
+    fn parse_prefix_op(&mut self, op: TokenKind) -> ast::Expr {
+        self.consume(op);
+        let ((), right_binding_power) = op.prefix_binding_power();
+        let expr = self.parse_expression(right_binding_power);
+        ast::Expr::PrefixOp {
+            op,
+            expr: Box::new(expr),
+        }
     }
 
     pub fn expression(&mut self) -> ast::Expr {
