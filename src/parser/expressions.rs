@@ -4,7 +4,7 @@ use super::{ast, Parser};
 
 trait Operator {
     /// Prefix operators bind their operand to the right
-    fn prefix_binding_power(&self) -> ((), u8);
+    fn prefix_binding_power(&self) -> Option<((), u8)>;
 
     /// Infix operators bind two operands, lhs and rhs
     fn infix_binding_power(&self) -> Option<(u8, u8)>;
@@ -66,12 +66,12 @@ where
             TokenKind::LeftParen => self.parse_grouping()?,
 
             // Parse prefix operator + expression (`op` holds the matched `TokenType`)
-            op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op),
+            op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op)?,
             _ => todo!(),
         };
 
         loop {
-            let op = match self.peek()? {
+            let op = match self.peek() {
                 op @ TokenKind::Plus
                 | op @ TokenKind::Minus
                 | op @ TokenKind::Multiply
@@ -146,9 +146,10 @@ where
             TokenKind::IntLit => ast::Lit::Int(
                 literal_text
                     // Laziness at its peak:
-                    .parse()?,
+                    .parse()
+                    .ok()?,
             ),
-            TokenKind::FloatLit => ast::Lit::Float(literal_text.parse()?),
+            TokenKind::FloatLit => ast::Lit::Float(literal_text.parse().ok()?),
             TokenKind::StringLit => ast::Lit::String(
                 // Trim the quotes
                 literal_text[1..(literal_text.len() - 1)].to_string(),
@@ -159,6 +160,22 @@ where
         Some(ast::Expr::Literal(lit))
     }
 
+    fn parse_function_call(&mut self, name: String) -> Option<ast::Expr> {
+        let mut args = Vec::new();
+        while !self.at(TokenKind::Delimiter)? {
+            args.push(if self.peek() == TokenKind::LeftParen {
+                self.consume(TokenKind::LeftParen)?;
+                let expr = self.expression()?;
+                self.consume(TokenKind::RightParen)?;
+                expr
+            } else {
+                self.parse_identifier()?
+            });
+        }
+
+        Some(ast::Expr::FnCall { name, args })
+    }
+
     #[inline(always)]
     fn parse_identifier(&mut self) -> Option<ast::Expr> {
         let name = {
@@ -166,24 +183,18 @@ where
             self.text(ident_token).to_string()
         };
 
-        Some(if !self.at(TokenKind::LeftParen) {
-            // Plain identifier
-            ast::Expr::Ident(name)
-        } else {
-            // Function call
-            let mut args = Vec::new();
-            // Consoom parens and function arguments
-            while !self.at(TokenKind::Delimiter) {
-                let arg = self.parse_expression(0);
-                args.push(arg);
-            }
-
-            ast::Expr::FnCall { name, args }
+        Some(match self.peek() {
+            TokenKind::LeftParen
+            | TokenKind::Ident
+            | TokenKind::IntLit
+            | TokenKind::FloatLit
+            | TokenKind::StringLit => self.parse_function_call(name)?,
+            _ => ast::Expr::Ident(name),
         })
     }
 
     #[inline(always)]
-    fn parse_grouping(&mut self) -> ast::Expr {
+    fn parse_grouping(&mut self) -> Option<ast::Expr> {
         // No special AST node, just influences the structure by evaluating the expression
         // within the parens first
         self.consume(TokenKind::LeftParen);
@@ -203,7 +214,7 @@ where
         })
     }
 
-    pub fn expression(&mut self) -> ast::Expr {
+    pub fn expression(&mut self) -> Option<ast::Expr> {
         self.parse_expression(0)
     }
 }
@@ -211,6 +222,18 @@ where
 #[test]
 fn parse_expr() {
     let test = "10 + -9 * 0 - 90 / -90 != 69 / -4";
-    let expr = Parser::new(test).expression();
+    let expr = Parser::new(test).expression().unwrap();
+    println!("Test: \"{}\":\n{}", test, expr);
+
+    let test = "hello";
+    let expr = Parser::new(test).expression().unwrap();
+    println!("Test: \"{}\":\n{}", test, expr);
+
+    let test = r#"say "hello there" "good fellow";"#;
+    let expr = Parser::new(test).expression().unwrap();
+    println!("Test: \"{}\":\n{}", test, expr);
+
+    let test = "add 1 2 (69 + 420);";
+    let expr = Parser::new(test).expression().unwrap();
     println!("Test: \"{}\":\n{}", test, expr);
 }

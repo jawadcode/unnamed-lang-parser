@@ -70,16 +70,16 @@ where
     }
 
     /// Look ahead a single token and get its `TokenKind` without consuming it
-    pub(crate) fn peek(&mut self) -> Option<TokenKind> {
+    pub(crate) fn peek(&mut self) -> TokenKind {
         self.tokens
             .peek()
-            .map(|token| token.kind)?
+            .map(|token| token.kind)
             .unwrap_or(TokenKind::EOF)
     }
 
     /// Check if the next token (using `peek()`) is of the specified `kind`
     pub(crate) fn at(&mut self, kind: TokenKind) -> Option<bool> {
-        Some(self.peek()? == kind)
+        Some(self.peek() == kind)
     }
 
     /// Get and consume the next token
@@ -90,7 +90,10 @@ where
     /// Move forward a single token and check that the kind of token is `expected`
     pub(crate) fn consume(&mut self, expected: TokenKind) -> Option<()> {
         let token = self.next()?;
-        Some((true))
+        if token.kind != expected {
+            return None;
+        }
+        Some(())
         // .expect(&format!(
         //     "Expected to consume `{}` but there was no next token",
         //     expected
