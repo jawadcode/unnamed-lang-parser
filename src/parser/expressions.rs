@@ -54,12 +54,12 @@ where
 {
     pub fn parse_expression(&mut self, binding_power: u8) -> Option<ast::Expr> {
         let mut lhs = match self.peek() {
-            // Parse int, float and string literals
+            // Parse int, float or string literal
             lit @ TokenKind::IntLit | lit @ TokenKind::FloatLit | lit @ TokenKind::StringLit => {
                 self.parse_literal(lit)?
             }
 
-            // Parse identifier or function invocation
+            // Parse identifier or function call
             TokenKind::Ident => self.parse_identifier()?,
 
             // Parse grouping
@@ -87,7 +87,7 @@ where
                 | op @ TokenKind::Equals => op,
                 TokenKind::EOF => break,
                 TokenKind::RightParen | TokenKind::Delimiter => break,
-                kind => {
+                _kind => {
                     // panic!("Unknown operator: `{}`", kind)
                     return None;
                 }
@@ -136,6 +136,7 @@ where
     }
 
     #[inline(always)]
+    /// Parse string, integer or float literal
     fn parse_literal(&mut self, lit: TokenKind) -> Option<ast::Expr> {
         let literal_text = {
             // Consume the literal and get the text for it
@@ -160,16 +161,25 @@ where
         Some(ast::Expr::Literal(lit))
     }
 
+    /// Parse function call arguments parsing function arguments as expressions
     fn parse_function_call(&mut self, name: String) -> Option<ast::Expr> {
         let mut args = Vec::new();
-        while !self.at(TokenKind::Delimiter)? {
-            args.push(if self.peek() == TokenKind::LeftParen {
-                self.consume(TokenKind::LeftParen)?;
-                let expr = self.expression()?;
-                self.consume(TokenKind::RightParen)?;
-                expr
-            } else {
-                self.parse_identifier()?
+        while !(self.at(TokenKind::Delimiter)? || self.at(TokenKind::RightParen)?) {
+            args.push(match self.peek() {
+                TokenKind::LeftParen => {
+                    self.consume(TokenKind::LeftParen)?;
+                    let expr = self.expression()?;
+                    self.consume(TokenKind::RightParen)?;
+                    expr
+                }
+                TokenKind::Ident => {
+                    let ident_token = self.next()?;
+                    ast::Expr::Ident(self.text(ident_token).to_string())
+                }
+                lit @ TokenKind::StringLit
+                | lit @ TokenKind::IntLit
+                | lit @ TokenKind::FloatLit => self.parse_literal(lit)?,
+                _ => unreachable!(),
             });
         }
 
@@ -177,26 +187,30 @@ where
     }
 
     #[inline(always)]
+    /// Parse identifier or function call
     fn parse_identifier(&mut self) -> Option<ast::Expr> {
         let name = {
             let ident_token = self.next()?;
             self.text(ident_token).to_string()
         };
 
-        Some(match self.peek() {
-            TokenKind::LeftParen
-            | TokenKind::Ident
-            | TokenKind::IntLit
-            | TokenKind::FloatLit
-            | TokenKind::StringLit => self.parse_function_call(name)?,
-            _ => ast::Expr::Ident(name),
-        })
+        Some(
+            // If any of the following appear as the next token
+            // then it must be a function call with a function argument following it
+            match self.peek() {
+                TokenKind::LeftParen
+                | TokenKind::Ident
+                | TokenKind::IntLit
+                | TokenKind::FloatLit
+                | TokenKind::StringLit => self.parse_function_call(name)?,
+                _ => ast::Expr::Ident(name),
+            },
+        )
     }
 
     #[inline(always)]
+    /// No special AST node, just influences the structure by evaluating the expression within the parens first
     fn parse_grouping(&mut self) -> Option<ast::Expr> {
-        // No special AST node, just influences the structure by evaluating the expression
-        // within the parens first
         self.consume(TokenKind::LeftParen);
         let expr = self.parse_expression(0);
         self.consume(TokenKind::RightParen);
@@ -204,6 +218,7 @@ where
     }
 
     #[inline(always)]
+    /// Parse prefix operation
     fn parse_prefix_op(&mut self, op: TokenKind) -> Option<ast::Expr> {
         self.consume(op);
         let ((), right_binding_power) = op.prefix_binding_power()?;
@@ -214,26 +229,51 @@ where
         })
     }
 
+    /// Parse expression
     pub fn expression(&mut self) -> Option<ast::Expr> {
         self.parse_expression(0)
     }
 }
 
-#[test]
-fn parse_expr() {
-    let test = "10 + -9 * 0 - 90 / -90 != 69 / -4";
-    let expr = Parser::new(test).expression().unwrap();
-    println!("Test: \"{}\":\n{}", test, expr);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let test = "hello";
-    let expr = Parser::new(test).expression().unwrap();
-    println!("Test: \"{}\":\n{}", test, expr);
+    macro_rules! assert_expr {
+        ($sample:expr, $sexpr:expr) => {
+            let test = $sample;
+            let expr = Parser::new(test).expression().unwrap();
+            println!(
+                "Sample: \"{}\":\nGot: \"{}\"\nWanted: {}",
+                $sample, expr, $sexpr
+            );
+            assert_eq!(format!("{}", expr), $sexpr)
+        };
+    }
 
-    let test = r#"say "hello there" "good fellow";"#;
-    let expr = Parser::new(test).expression().unwrap();
-    println!("Test: \"{}\":\n{}", test, expr);
+    #[test]
+    fn parse_arithmetic_comparison_operators() {
+        assert_expr!(
+            "10 + -9 * 0 - 90 / -90 != 69 / -4",
+            "(!= (- (+ 10 (* (- 9) 0)) (/ 90 (- 90))) (/ 69 (- 4)))"
+        );
+    }
 
-    let test = "add 1 2 (69 + 420);";
-    let expr = Parser::new(test).expression().unwrap();
-    println!("Test: \"{}\":\n{}", test, expr);
+    #[test]
+    fn parse_identifier() {
+        assert_expr!("hello", "hello");
+    }
+
+    #[test]
+    fn parse_simple_function_call() {
+        assert_expr!("add 1 (69 + 420) 2;", "(add 1 (+ 69 420) 2)");
+    }
+
+    #[test]
+    fn parse_nested_function_call() {
+        assert_expr!(
+            "add (69 + 420) (add 57893 43280);",
+            "(add (+ 69 420) (add 57893 43280))"
+        );
+    }
 }
