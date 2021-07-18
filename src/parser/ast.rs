@@ -27,6 +27,15 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    If {
+        cond: Box<Expr>,
+        true_value: Box<Expr>,
+        false_value: Box<Expr>,
+    },
+    Block {
+        stmts: Vec<Stmt>,
+        expr: Option<Box<Expr>>,
+    },
     PrefixOp {
         op: TokenKind,
         expr: Box<Expr>,
@@ -42,11 +51,24 @@ pub enum Expr {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Stmt {
+    Let {
+        name: String,
+        value: Box<Expr>,
+    },
+    FnDef {
+        name: String,
+        params: Vec<String>,
+        body: Box<Expr>,
+    },
+}
+
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Literal(lit) => write!(f, "{}", lit),
-            Expr::Ident(name) => write!(f, "{}", name),
+            Expr::Literal(lit) => write!(f, "({})", lit),
+            Expr::Ident(name) => write!(f, "({})", name),
             Expr::FnCall { name, args } => {
                 write!(
                     f,
@@ -58,9 +80,41 @@ impl fmt::Display for Expr {
                         .join(" ")
                 )
             }
+            Expr::If {
+                cond,
+                true_value,
+                false_value,
+            } => write!(f, "(if {} {} {})", cond, true_value, false_value),
+            Expr::Block { stmts, expr } => {
+                write!(
+                    f,
+                    "(block {} {})",
+                    stmts
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    if let Some(ex) = expr {
+                        format!("{}", ex)
+                    } else {
+                        "".to_string()
+                    }
+                )
+            }
             Expr::PrefixOp { op, expr } => write!(f, "({} {})", op, expr),
             Expr::InfixOp { op, lhs, rhs } => write!(f, "({} {} {})", op, lhs, rhs),
             Expr::PostfixOp { op, expr } => write!(f, "({} {})", op, expr),
+        }
+    }
+}
+
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Stmt::Let { name, value } => write!(f, "(let {} {})", name, value),
+            Stmt::FnDef { name, params, body } => {
+                write!(f, "(define {} ({}) {})", name, params.join(" "), body)
+            }
         }
     }
 }

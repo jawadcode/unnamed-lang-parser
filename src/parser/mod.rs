@@ -1,8 +1,10 @@
 mod ast;
 mod expressions;
+mod statements;
 
 pub use ast::*;
 pub use expressions::*;
+pub use statements::*;
 
 use std::iter::Peekable;
 
