@@ -20,7 +20,7 @@ impl Operator for TokenKind {
             TokenKind::LogicalNot => ((), 101),
             _ => {
                 return None;
-                // unreachable!("Not a prefix operator: {:?}")#
+                // unreachable!("Not a prefix operator: {:?}")
             }
         })
     }
@@ -67,7 +67,8 @@ where
 
             // Parse prefix operator + expression (`op` holds the matched `TokenType`)
             op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op)?,
-            _ => todo!(),
+
+            _ => return None,
         };
 
         loop {
@@ -85,8 +86,7 @@ where
                 | op @ TokenKind::GreaterEq
                 | op @ TokenKind::NotEq
                 | op @ TokenKind::Equals => op,
-                TokenKind::EOF => break,
-                TokenKind::RightParen | TokenKind::Delimiter => break,
+                TokenKind::EOF | TokenKind::RightParen | TokenKind::Delimiter => break,
                 _kind => {
                     // panic!("Unknown operator: `{}`", kind)
                     return None;
@@ -135,7 +135,6 @@ where
         Some(lhs)
     }
 
-    #[inline(always)]
     /// Parse string, integer or float literal
     fn parse_literal(&mut self, lit: TokenKind) -> Option<ast::Expr> {
         let literal_text = {
@@ -143,6 +142,7 @@ where
             let literal_token = self.next()?;
             self.text(literal_token)
         };
+
         let lit = match lit {
             TokenKind::IntLit => ast::Lit::Int(
                 literal_text
@@ -186,7 +186,6 @@ where
         Some(ast::Expr::FnCall { name, args })
     }
 
-    #[inline(always)]
     /// Parse identifier or function call
     fn parse_identifier(&mut self) -> Option<ast::Expr> {
         let name = {
@@ -208,7 +207,6 @@ where
         )
     }
 
-    #[inline(always)]
     /// No special AST node, just influences the structure by evaluating the expression within the parens first
     fn parse_grouping(&mut self) -> Option<ast::Expr> {
         self.consume(TokenKind::LeftParen);
@@ -217,16 +215,23 @@ where
         expr
     }
 
-    #[inline(always)]
     /// Parse prefix operation
     fn parse_prefix_op(&mut self, op: TokenKind) -> Option<ast::Expr> {
         self.consume(op);
         let ((), right_binding_power) = op.prefix_binding_power()?;
-        let expr = self.parse_expression(right_binding_power)?;
-        Some(ast::Expr::PrefixOp {
-            op,
-            expr: Box::new(expr),
-        })
+        let expr = Box::new(self.parse_expression(right_binding_power)?);
+        Some(ast::Expr::PrefixOp { op, expr })
+    }
+
+    /// Parse block expression
+    pub(crate) fn parse_block(&mut self) -> Option<ast::Expr> {
+        let mut stmts = Vec::new();
+        while let Some(stmt) = self.parse_statement() {
+            stmts.push(stmt);
+        }
+        let expr = self.expression().map(|e| Box::new(e));
+
+        Some(ast::Expr::Block { stmts, expr })
     }
 
     /// Parse expression

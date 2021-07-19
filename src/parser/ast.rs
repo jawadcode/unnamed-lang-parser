@@ -62,13 +62,16 @@ pub enum Stmt {
         params: Vec<String>,
         body: Box<Expr>,
     },
+    ExprStmt {
+        expr: Box<Expr>,
+    },
 }
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Literal(lit) => write!(f, "({})", lit),
-            Expr::Ident(name) => write!(f, "({})", name),
+            Expr::Literal(lit) => write!(f, "{}", lit),
+            Expr::Ident(name) => write!(f, "{}", name),
             Expr::FnCall { name, args } => {
                 write!(
                     f,
@@ -111,10 +114,11 @@ impl fmt::Display for Expr {
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stmt::Let { name, value } => write!(f, "(let {} {})", name, value),
+            Stmt::Let { name, value } => write!(f, "(let ({} {}))", name, value),
             Stmt::FnDef { name, params, body } => {
                 write!(f, "(define {} ({}) {})", name, params.join(" "), body)
             }
+            Stmt::ExprStmt { expr } => write!(f, "{}", expr),
         }
     }
 }

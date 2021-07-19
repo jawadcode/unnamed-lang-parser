@@ -11,13 +11,11 @@ pub struct Token {
 }
 
 impl Token {
-    #[inline(always)]
     /// Returns the length of the token
     pub fn len(&self) -> usize {
         (self.span.end - self.span.start) as usize
     }
 
-    #[inline(always)]
     /// Returns the token's text as a slice of the input string
     pub fn text<'input>(&self, input: &'input str) -> &'input str {
         &input[self.span]

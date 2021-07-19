@@ -188,7 +188,6 @@ impl fmt::Display for TokenKind {
 }
 
 impl LogosToken {
-    #[inline(always)]
     pub fn kind(&self) -> TokenKind {
         match self {
             LogosToken::Function => TokenKind::Function,
