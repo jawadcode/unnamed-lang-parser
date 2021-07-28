@@ -101,7 +101,8 @@ where
                 | TokenKind::Pipe
                 | TokenKind::FatArrow
                 | TokenKind::Then
-                | TokenKind::Else => break,
+                | TokenKind::Else
+                | TokenKind::End => break,
                 _kind => {
                     // panic!("Unknown operator: `{}`", kind)
                     return None;
@@ -255,6 +256,7 @@ where
             arms.push((patterns, value));
         }
 
+        self.consume(TokenKind::End)?;
         Some(ast::Expr::Match { expr, arms })
     }
 
@@ -344,7 +346,12 @@ mod tests {
     #[test]
     fn parse_match_expr() {
         assert_expr!(
-            "match x | 1 => 69 | 2, 3 => 420 | _ => x * x * x",
+            r#"
+match x
+  | 1 => 69
+  | 2, 3 => 420
+  | _ => x * x * x
+end"#,
             "(match x (1 69) ((2 3) 420) (_ (* (* x x) x)))"
         );
     }
