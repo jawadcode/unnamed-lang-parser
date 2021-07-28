@@ -70,6 +70,9 @@ where
             // Parse match expression
             TokenKind::Match => self.parse_match_expr()?,
 
+            // Parse block expression
+            TokenKind::Begin => self.parse_block_expr()?,
+
             // Parse grouping
             TokenKind::LeftParen => self.parse_grouping()?,
 
@@ -180,7 +183,16 @@ where
     /// Parse function call arguments parsing function arguments as expressions
     fn parse_function_call(&mut self, name: String) -> Option<ast::Expr> {
         let mut args = Vec::new();
-        while !(self.at(TokenKind::Delimiter) || self.at(TokenKind::RightParen)) {
+        while !(self.at(TokenKind::RightParen)
+            || self.at(TokenKind::Delimiter)
+            || self.at(TokenKind::Comma)
+            || self.at(TokenKind::Pipe)
+            || self.at(TokenKind::FatArrow)
+            || self.at(TokenKind::Then)
+            || self.at(TokenKind::Else)
+            || self.at(TokenKind::End)
+            || self.at(TokenKind::EOF))
+        {
             args.push(match self.peek() {
                 TokenKind::LeftParen => {
                     self.consume(TokenKind::LeftParen)?;
@@ -260,11 +272,29 @@ where
         Some(ast::Expr::Match { expr, arms })
     }
 
+    /// Parse block expression
+    pub(crate) fn parse_block_expr(&mut self) -> Option<ast::Expr> {
+        self.consume(TokenKind::Begin)?;
+
+        let mut stmts = Vec::new();
+        while let Some(stmt) = self.parse_statement() {
+            stmts.push(stmt);
+        }
+
+        let expr = self.expression().map(|e| Box::new(e));
+        Some(ast::Expr::Block { stmts, expr })
+    }
+
+    /// Parse expression
+    pub fn expression(&mut self) -> Option<ast::Expr> {
+        self.parse_expression(0)
+    }
+
     /// No special AST node, just influences the structure by evaluating the expression within the parens first
     fn parse_grouping(&mut self) -> Option<ast::Expr> {
-        self.consume(TokenKind::LeftParen);
+        self.consume(TokenKind::LeftParen)?;
         let expr = self.parse_expression(0);
-        self.consume(TokenKind::RightParen);
+        self.consume(TokenKind::RightParen)?;
         expr
     }
 
@@ -274,22 +304,6 @@ where
         let ((), right_binding_power) = op.prefix_binding_power()?;
         let expr = Box::new(self.parse_expression(right_binding_power)?);
         Some(ast::Expr::PrefixOp { op, expr })
-    }
-
-    /// Parse block expression
-    pub(crate) fn parse_block(&mut self) -> Option<ast::Expr> {
-        let mut stmts = Vec::new();
-        while let Some(stmt) = self.parse_statement() {
-            stmts.push(stmt);
-        }
-        let expr = self.expression().map(|e| Box::new(e));
-
-        Some(ast::Expr::Block { stmts, expr })
-    }
-
-    /// Parse expression
-    pub fn expression(&mut self) -> Option<ast::Expr> {
-        self.parse_expression(0)
     }
 }
 
@@ -302,7 +316,7 @@ mod tests {
             let test = $sample;
             let expr = Parser::new(test).expression().unwrap();
             println!(
-                "Sample: \"{}\"\nGot: \"{}\"\nWanted: {}",
+                "Sample: \"{}\"\nGot:    {}\nWanted: {}",
                 $sample, expr, $sexpr
             );
             assert_eq!(format!("{}", expr), $sexpr)
@@ -353,6 +367,19 @@ match x
   | _ => x * x * x
 end"#,
             "(match x (1 69) ((2 3) 420) (_ (* (* x x) x)))"
+        );
+    }
+
+    #[test]
+    fn parse_block_expr() {
+        assert_expr!(
+            r#"
+begin
+  let thing = 123;
+  let thing2 = 234;
+  thing + thing2
+end"#,
+            "(block (let (thing 123)) (let (thing2 234)) (+ thing thing2))"
         );
     }
 }

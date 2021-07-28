@@ -10,7 +10,7 @@ pub enum TokenKind {
     Then,
     Else,
     Match,
-    Do,
+    Begin,
     End,
     Ident,
     IntLit,
@@ -63,8 +63,8 @@ pub enum LogosToken {
     #[token("match")]
     Match,
 
-    #[token("do")]
-    Do,
+    #[token("begin")]
+    Begin,
 
     #[token("end")]
     End,
@@ -166,7 +166,7 @@ impl fmt::Display for TokenKind {
                 TokenKind::Then => "then",
                 TokenKind::Else => "else",
                 TokenKind::Match => "match",
-                TokenKind::Do => "do",
+                TokenKind::Begin => "begin",
                 TokenKind::End => "end",
                 TokenKind::Ident => "Identifier",
                 TokenKind::IntLit => "Integer Literal",
@@ -211,7 +211,7 @@ impl LogosToken {
             LogosToken::Then => TokenKind::Then,
             LogosToken::Else => TokenKind::Else,
             LogosToken::Match => TokenKind::Match,
-            LogosToken::Do => TokenKind::Do,
+            LogosToken::Begin => TokenKind::Begin,
             LogosToken::End => TokenKind::End,
             LogosToken::Ident => TokenKind::Ident,
             LogosToken::IntLit => TokenKind::IntLit,

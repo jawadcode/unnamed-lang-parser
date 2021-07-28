@@ -125,14 +125,15 @@ impl fmt::Display for Expr {
             Expr::Block { stmts, expr } => {
                 write!(
                     f,
-                    "(block {} {})",
+                    "(block{}{}{})",
+                    if stmts.len() > 0 { " " } else { "" },
                     stmts
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(" "),
                     if let Some(ex) = expr {
-                        format!("{}", ex)
+                        format!(" {}", ex)
                     } else {
                         "".to_string()
                     }
