@@ -32,6 +32,10 @@ pub enum Expr {
         true_value: Box<Expr>,
         false_value: Box<Expr>,
     },
+    Match {
+        expr: Box<Expr>,
+        arms: Vec<(Vec<Expr>, Expr)>,
+    },
     Block {
         stmts: Vec<Stmt>,
         expr: Option<Box<Expr>>,
@@ -87,7 +91,37 @@ impl fmt::Display for Expr {
                 cond,
                 true_value,
                 false_value,
-            } => write!(f, "(if {} {} {})", cond, true_value, false_value),
+            } => write!(
+                f,
+                "(if :cond {} :then {} :else {})",
+                cond, true_value, false_value
+            ),
+            Expr::Match { expr, arms } => {
+                write!(
+                    f,
+                    "(match {} {})",
+                    expr,
+                    arms.iter()
+                        .map(|arm| format!(
+                            "({} {})",
+                            if arm.0.len() > 1 {
+                                format!(
+                                    "({})",
+                                    arm.0
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(" ")
+                                )
+                            } else {
+                                arm.0[0].to_string()
+                            },
+                            arm.1
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                )
+            }
             Expr::Block { stmts, expr } => {
                 write!(
                     f,

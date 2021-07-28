@@ -31,7 +31,7 @@ where
         self.consume(TokenKind::Colon)?;
 
         let mut params = Vec::new();
-        while self.at(TokenKind::Ident)? {
+        while self.at(TokenKind::Ident) {
             let param_token = self.next()?;
             let param = self.text(param_token).to_string();
             params.push(param);

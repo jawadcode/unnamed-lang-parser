@@ -80,8 +80,8 @@ where
     }
 
     /// Check if the next token (using `peek()`) is of the specified `kind`
-    pub(crate) fn at(&mut self, kind: TokenKind) -> Option<bool> {
-        Some(self.peek() == kind)
+    pub(crate) fn at(&mut self, kind: TokenKind) -> bool {
+        self.peek() == kind
     }
 
     /// Get and consume the next token

@@ -1,3 +1,5 @@
+use std::str::MatchIndices;
+
 use crate::lexer::{Token, TokenKind};
 
 use super::{ast, Parser};
@@ -62,6 +64,12 @@ where
             // Parse identifier or function call
             TokenKind::Ident => self.parse_identifier()?,
 
+            // Parse if expression
+            TokenKind::If => self.parse_if_expr()?,
+
+            // Parse match expression
+            TokenKind::Match => self.parse_match_expr()?,
+
             // Parse grouping
             TokenKind::LeftParen => self.parse_grouping()?,
 
@@ -86,7 +94,14 @@ where
                 | op @ TokenKind::GreaterEq
                 | op @ TokenKind::NotEq
                 | op @ TokenKind::Equals => op,
-                TokenKind::EOF | TokenKind::RightParen | TokenKind::Delimiter => break,
+                TokenKind::EOF
+                | TokenKind::RightParen
+                | TokenKind::Delimiter
+                | TokenKind::Comma
+                | TokenKind::Pipe
+                | TokenKind::FatArrow
+                | TokenKind::Then
+                | TokenKind::Else => break,
                 _kind => {
                     // panic!("Unknown operator: `{}`", kind)
                     return None;
@@ -164,7 +179,7 @@ where
     /// Parse function call arguments parsing function arguments as expressions
     fn parse_function_call(&mut self, name: String) -> Option<ast::Expr> {
         let mut args = Vec::new();
-        while !(self.at(TokenKind::Delimiter)? || self.at(TokenKind::RightParen)?) {
+        while !(self.at(TokenKind::Delimiter) || self.at(TokenKind::RightParen)) {
             args.push(match self.peek() {
                 TokenKind::LeftParen => {
                     self.consume(TokenKind::LeftParen)?;
@@ -205,6 +220,42 @@ where
                 _ => ast::Expr::Ident(name),
             },
         )
+    }
+
+    /// Parse if(+else) expression
+    fn parse_if_expr(&mut self) -> Option<ast::Expr> {
+        self.consume(TokenKind::If)?;
+        let cond = Box::new(self.expression()?);
+        self.consume(TokenKind::Then)?;
+        let true_value = Box::new(self.expression()?);
+        self.consume(TokenKind::Else)?;
+        let false_value = Box::new(self.expression()?);
+        Some(ast::Expr::If {
+            cond,
+            true_value,
+            false_value,
+        })
+    }
+
+    /// Parse match expression
+    fn parse_match_expr(&mut self) -> Option<ast::Expr> {
+        self.consume(TokenKind::Match)?;
+        let expr = Box::new(self.expression()?);
+
+        let mut arms: Vec<(Vec<ast::Expr>, ast::Expr)> = vec![];
+        while self.at(TokenKind::Pipe) {
+            self.consume(TokenKind::Pipe)?;
+            let mut patterns = vec![self.expression()?];
+            while self.at(TokenKind::Comma) {
+                self.consume(TokenKind::Comma)?;
+                patterns.push(self.expression()?);
+            }
+            self.consume(TokenKind::FatArrow)?;
+            let value = self.expression()?;
+            arms.push((patterns, value));
+        }
+
+        Some(ast::Expr::Match { expr, arms })
     }
 
     /// No special AST node, just influences the structure by evaluating the expression within the parens first
@@ -249,7 +300,7 @@ mod tests {
             let test = $sample;
             let expr = Parser::new(test).expression().unwrap();
             println!(
-                "Sample: \"{}\":\nGot: \"{}\"\nWanted: {}",
+                "Sample: \"{}\"\nGot: \"{}\"\nWanted: {}",
                 $sample, expr, $sexpr
             );
             assert_eq!(format!("{}", expr), $sexpr)
@@ -279,6 +330,22 @@ mod tests {
         assert_expr!(
             "add (69 + 420) (add 57893 43280);",
             "(add (+ 69 420) (add 57893 43280))"
+        );
+    }
+
+    #[test]
+    fn parse_if_expr() {
+        assert_expr!(
+            "if 10 > 89 + 90 then 1 + 1 else -1",
+            "(if :cond (> 10 (+ 89 90)) :then (+ 1 1) :else (- 1))"
+        );
+    }
+
+    #[test]
+    fn parse_match_expr() {
+        assert_expr!(
+            "match x | 1 => 69 | 2, 3 => 420 | _ => x * x * x",
+            "(match x (1 69) ((2 3) 420) (_ (* (* x x) x)))"
         );
     }
 }

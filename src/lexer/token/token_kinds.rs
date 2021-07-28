@@ -33,6 +33,9 @@ pub enum TokenKind {
     RightParen,
     Assign,
     Colon,
+    Pipe,
+    FatArrow,
+    Comma,
     Delimiter,
     Comment,
     Whitespace,
@@ -129,6 +132,15 @@ pub enum LogosToken {
     #[token(":")]
     Colon,
 
+    #[token("|")]
+    Pipe,
+
+    #[token("=>")]
+    FatArrow,
+
+    #[token(",")]
+    Comma,
+
     #[token(";")]
     Delimiter,
 
@@ -177,6 +189,9 @@ impl fmt::Display for TokenKind {
                 TokenKind::RightParen => ")",
                 TokenKind::Assign => "=",
                 TokenKind::Colon => ":",
+                TokenKind::Pipe => "|",
+                TokenKind::FatArrow => "=>",
+                TokenKind::Comma => ",",
                 TokenKind::Delimiter => ";",
                 TokenKind::Comment => "Comment",
                 TokenKind::Whitespace => "<WS>",
@@ -219,6 +234,9 @@ impl LogosToken {
             LogosToken::RightParen => TokenKind::RightParen,
             LogosToken::Assign => TokenKind::Assign,
             LogosToken::Colon => TokenKind::Colon,
+            LogosToken::Pipe => TokenKind::Pipe,
+            LogosToken::FatArrow => TokenKind::FatArrow,
+            LogosToken::Comma => TokenKind::Comma,
             LogosToken::Delimiter => TokenKind::Delimiter,
             LogosToken::Comment => TokenKind::Comment,
             LogosToken::Error => TokenKind::Error,
