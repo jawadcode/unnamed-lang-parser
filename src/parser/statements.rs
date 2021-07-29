@@ -31,6 +31,7 @@ where
 
         let mut params = Vec::new();
         if self.at(TokenKind::Colon) {
+            self.consume(TokenKind::Colon)?;
             while self.at(TokenKind::Ident) {
                 let param_token = self.next()?;
                 let param = self.text(param_token).to_string();
@@ -56,7 +57,7 @@ mod tests {
                 "Sample: \"{}\":\nGot:    {}\nWanted: {}",
                 $sample, stmt, $sexpr
             );
-            assert_eq!(format!("{}", stmt), $sexpr)
+            assert_eq!(stmt.to_string(), $sexpr)
         };
     }
 
@@ -70,7 +71,7 @@ mod tests {
 
     #[test]
     fn parse_basic_fndef() {
-        assert_stmt!("function add: x y = x + y", "(define add (x y) (+ x y)");
+        assert_stmt!("function add: x y = x + y", "(define add (x y) (+ x y))");
     }
 
     #[test]
