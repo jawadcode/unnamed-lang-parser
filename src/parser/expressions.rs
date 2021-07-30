@@ -319,7 +319,7 @@ mod tests {
                 "Sample: \"{}\"\nGot:    {}\nWanted: {}",
                 $sample, expr, $sexpr
             );
-            assert_eq!(format!("{}", expr), $sexpr)
+            assert_eq!(expr.to_string(), $sexpr)
         };
     }
 

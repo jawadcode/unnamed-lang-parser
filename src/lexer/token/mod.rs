@@ -20,6 +20,25 @@ impl Token {
     pub fn text<'input>(&self, input: &'input str) -> &'input str {
         &input[self.span]
     }
+
+    /// Return the line number (0 based) and column number (0 based)
+    /// of the token (relative to the input string)
+    pub(crate) fn get_line_and_column(&self, input: &str) -> (usize, usize) {
+        let start = self.span.start as usize;
+        let mut line = 0;
+        let mut column = 0;
+        for (index, byte) in input.bytes().enumerate() {
+            if index == start {
+                break;
+            }
+            if byte == b'\n' {
+                line += 1;
+                column = 0;
+            }
+            column += 1;
+        }
+        (line, column)
+    }
 }
 
 impl fmt::Display for Token {

@@ -1,8 +1,10 @@
 mod ast;
+mod errors;
 mod expressions;
 mod statements;
 
 pub use ast::*;
+pub use errors::*;
 pub use expressions::*;
 pub use statements::*;
 
