@@ -194,9 +194,9 @@ impl fmt::Display for TokenKind {
                 TokenKind::Comma => ",",
                 TokenKind::Delimiter => ";",
                 TokenKind::Comment => "Comment",
-                TokenKind::Whitespace => "<WS>",
+                TokenKind::Whitespace => "Whitespace",
                 TokenKind::Error => "<?>",
-                _ => unreachable!(),
+                TokenKind::EOF => "EOF",
             }
         )
     }

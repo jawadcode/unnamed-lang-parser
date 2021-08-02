@@ -4,13 +4,14 @@ use std::ops::{Index, Range};
 mod token_kinds;
 pub use token_kinds::*;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
 
 impl Token {
+    #[inline(always)]
     /// Returns the length of the token
     pub fn len(&self) -> usize {
         (self.span.end - self.span.start) as usize
@@ -19,25 +20,6 @@ impl Token {
     /// Returns the token's text as a slice of the input string
     pub fn text<'input>(&self, input: &'input str) -> &'input str {
         &input[self.span]
-    }
-
-    /// Return the line number (0 based) and column number (0 based)
-    /// of the token (relative to the input string)
-    pub(crate) fn get_line_and_column(&self, input: &str) -> (usize, usize) {
-        let start = self.span.start as usize;
-        let mut line = 0;
-        let mut column = 0;
-        for (index, byte) in input.bytes().enumerate() {
-            if index == start {
-                break;
-            }
-            if byte == b'\n' {
-                line += 1;
-                column = 0;
-            }
-            column += 1;
-        }
-        (line, column)
     }
 }
 
@@ -64,6 +46,27 @@ pub struct Span {
     pub start: u32,
     /// exclusive
     pub end: u32,
+}
+
+impl Span {
+    /// Return the line number (0 based) and column number (0 based)
+    /// of the token (relative to the input string)
+    pub(crate) fn get_line_and_column(&self, input: &str) -> (usize, usize) {
+        let start = self.start as usize;
+        let mut line = 0;
+        let mut column = 0;
+        for (index, byte) in input.bytes().enumerate() {
+            if index == start {
+                break;
+            }
+            if byte == b'\n' {
+                line += 1;
+                column = 0;
+            }
+            column += 1;
+        }
+        (line, column)
+    }
 }
 
 impl From<Span> for Range<usize> {

@@ -1,39 +1,50 @@
 use crate::lexer::{Token, TokenKind};
 
-use super::{ast, Parser};
+use super::{ast, ErrorInfo, Parser, StmtResult, SyntaxError};
 
 impl<'input, I> Parser<'input, I>
 where
     I: Iterator<Item = Token>,
 {
-    pub fn parse_statement(&mut self) -> Option<ast::Stmt> {
-        Some(match self.peek() {
+    pub fn parse_statement(&mut self) -> StmtResult {
+        Ok(match self.peek() {
             TokenKind::Let => self.parse_let()?,
             TokenKind::Function => self.parse_fndef()?,
-            _ => return None,
+            kind => {
+                return Err(SyntaxError::UnexpectedToken {
+                    expected: r#""let" or "function""#.to_string(),
+                    token_kind: kind,
+                    info: ErrorInfo::new(self.next().unwrap().span, self.input),
+                });
+            }
         })
     }
 
-    fn parse_let(&mut self) -> Option<ast::Stmt> {
+    #[inline(always)]
+    pub fn is_statement(&mut self) -> bool {
+        matches!(self.peek(), TokenKind::Let | TokenKind::Function)
+    }
+
+    fn parse_let(&mut self) -> StmtResult {
         self.consume(TokenKind::Let)?;
-        let ident = self.next()?;
+        let ident = self.next().unwrap();
         let name = self.text(ident).to_string();
         self.consume(TokenKind::Assign)?;
         let value = Box::new(self.expression()?);
         self.consume(TokenKind::Delimiter)?;
-        Some(ast::Stmt::Let { name, value })
+        Ok(ast::Stmt::Let { name, value })
     }
 
-    fn parse_fndef(&mut self) -> Option<ast::Stmt> {
+    fn parse_fndef(&mut self) -> StmtResult {
         self.consume(TokenKind::Function)?;
-        let ident = self.next()?;
+        let ident = self.next().unwrap();
         let name = self.text(ident).to_string();
 
         let mut params = Vec::new();
         if self.at(TokenKind::Colon) {
             self.consume(TokenKind::Colon)?;
             while self.at(TokenKind::Ident) {
-                let param_token = self.next()?;
+                let param_token = self.next().unwrap();
                 let param = self.text(param_token).to_string();
                 params.push(param);
             }
@@ -41,7 +52,7 @@ where
 
         self.consume(TokenKind::Assign)?;
         let body = Box::new(self.expression()?);
-        Some(ast::Stmt::FnDef { name, params, body })
+        Ok(ast::Stmt::FnDef { name, params, body })
     }
 }
 
@@ -52,12 +63,19 @@ mod tests {
     macro_rules! assert_stmt {
         ($sample:expr, $sexpr:expr) => {
             let test = $sample;
-            let stmt = Parser::new(test).parse_statement().unwrap();
-            println!(
-                "Sample: \"{}\":\nGot:    {}\nWanted: {}",
-                $sample, stmt, $sexpr
-            );
-            assert_eq!(stmt.to_string(), $sexpr)
+            match Parser::new(test).parse_statement() {
+                Ok(stmt) => {
+                    println!(
+                        "Sample: \"{}\"\nGot:    {}\nWanted: {}",
+                        $sample, stmt, $sexpr
+                    );
+                    assert_eq!(stmt.to_string(), $sexpr)
+                }
+                Err(err) => {
+                    eprintln!("{:#?}", err);
+                    assert!(false)
+                }
+            }
         };
     }
 

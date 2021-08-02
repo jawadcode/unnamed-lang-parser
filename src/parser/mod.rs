@@ -1,16 +1,19 @@
 mod ast;
-mod errors;
+mod error;
 mod expressions;
 mod statements;
 
 pub use ast::*;
-pub use errors::*;
+pub use error::*;
 pub use expressions::*;
 pub use statements::*;
 
 use std::iter::Peekable;
 
 use crate::lexer::{Lexer, Token, TokenKind};
+
+type ExprResult = Result<Expr, SyntaxError>;
+type StmtResult = Result<Stmt, SyntaxError>;
 
 /// Wraps `Lexer` to filter out whitespace and comments
 pub struct TokenIter<'input> {
@@ -92,20 +95,17 @@ where
     }
 
     /// Move forward a single token and check that the kind of token is `expected`
-    pub(crate) fn consume(&mut self, expected: TokenKind) -> Option<()> {
-        let token = self.next()?;
+    pub(crate) fn consume(&mut self, expected: TokenKind) -> Result<(), SyntaxError> {
+        let token = self.next().unwrap();
+
         if token.kind != expected {
-            return None;
+            Err(SyntaxError::UnexpectedToken {
+                expected: expected.to_string(),
+                token_kind: token.kind,
+                info: ErrorInfo::new(token.span, self.input),
+            })
+        } else {
+            Ok(())
         }
-        Some(())
-        // .expect(&format!(
-        //     "Expected to consume `{}` but there was no next token",
-        //     expected
-        // ));
-        // assert_eq!(
-        //     token.kind, expected,
-        //     "Expected to consume `{}` but found `{}`",
-        //     expected, token.kind
-        // );
     }
 }

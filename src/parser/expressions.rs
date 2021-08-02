@@ -1,8 +1,9 @@
-use std::str::MatchIndices;
+use crate::{
+    lexer::{Token, TokenKind},
+    parser::ErrorInfo,
+};
 
-use crate::lexer::{Token, TokenKind};
-
-use super::{ast, Parser};
+use super::{ast, ExprResult, Parser, SyntaxError};
 
 trait Operator {
     /// Prefix operators bind their operand to the right
@@ -43,10 +44,11 @@ impl Operator for TokenKind {
     }
 
     fn postfix_binding_power(&self) -> Option<(u8, ())> {
-        Some(match self {
-            // TokenKind::Propagate => (101, ()),
-            _ => return None,
-        })
+        // Keep this here incase we need it and also for the sake of completeness
+        // Some(match self {
+        //     // TokenKind::Propagate => (101, ()),
+        // })
+        return None;
     }
 }
 
@@ -54,32 +56,32 @@ impl<'input, I> Parser<'input, I>
 where
     I: Iterator<Item = Token>,
 {
-    pub fn parse_expression(&mut self, binding_power: u8) -> Option<ast::Expr> {
+    pub fn parse_expression(&mut self, binding_power: u8) -> ExprResult {
         let mut lhs = match self.peek() {
-            // Parse int, float or string literal
             lit @ TokenKind::IntLit | lit @ TokenKind::FloatLit | lit @ TokenKind::StringLit => {
                 self.parse_literal(lit)?
             }
 
-            // Parse identifier or function call
             TokenKind::Ident => self.parse_identifier()?,
 
-            // Parse if expression
             TokenKind::If => self.parse_if_expr()?,
 
-            // Parse match expression
             TokenKind::Match => self.parse_match_expr()?,
 
-            // Parse block expression
             TokenKind::Begin => self.parse_block_expr()?,
 
-            // Parse grouping
             TokenKind::LeftParen => self.parse_grouping()?,
 
-            // Parse prefix operator + expression (`op` holds the matched `TokenType`)
             op @ TokenKind::Minus | op @ TokenKind::LogicalNot => self.parse_prefix_op(op)?,
 
-            _ => return None,
+            kind => {
+                let token = self.next().unwrap();
+                return Err(SyntaxError::UnexpectedToken {
+                    expected: "expression".to_string(),
+                    token_kind: kind,
+                    info: ErrorInfo::new(token.span, self.input),
+                });
+            }
         };
 
         loop {
@@ -106,9 +108,13 @@ where
                 | TokenKind::Then
                 | TokenKind::Else
                 | TokenKind::End => break,
-                _kind => {
-                    // panic!("Unknown operator: `{}`", kind)
-                    return None;
+                kind => {
+                    let token = self.next().unwrap();
+                    return Err(SyntaxError::UnexpectedToken {
+                        expected: r#"operator or expression terminator"#.to_string(),
+                        token_kind: kind,
+                        info: ErrorInfo::new(token.span, self.input),
+                    });
                 }
             };
 
@@ -119,7 +125,7 @@ where
                     break;
                 }
 
-                self.consume(op);
+                self.consume(op)?;
                 // no recursive call here, because we have already
                 // parsed our operand `lhs`
                 lhs = ast::Expr::PostfixOp {
@@ -137,7 +143,7 @@ where
                     break;
                 }
 
-                self.consume(op);
+                self.consume(op)?;
                 let rhs = self.parse_expression(right_binding_power)?;
                 lhs = ast::Expr::InfixOp {
                     op,
@@ -151,25 +157,31 @@ where
             break;
         }
 
-        Some(lhs)
+        Ok(lhs)
     }
 
     /// Parse string, integer or float literal
-    fn parse_literal(&mut self, lit: TokenKind) -> Option<ast::Expr> {
-        let literal_text = {
-            // Consume the literal and get the text for it
-            let literal_token = self.next()?;
-            self.text(literal_token)
-        };
+    fn parse_literal(&mut self, lit: TokenKind) -> ExprResult {
+        // Consume the literal and get the text for it
+        let literal_token = self.next().unwrap();
+        let literal_text = self.text(literal_token);
 
         let lit = match lit {
             TokenKind::IntLit => ast::Lit::Int(
                 literal_text
                     // Laziness at its peak:
                     .parse()
-                    .ok()?,
+                    .map_err(|_| SyntaxError::FailedToParseLiteral {
+                        token_kind: literal_token.kind,
+                        info: ErrorInfo::new(literal_token.span, self.input),
+                    })?,
             ),
-            TokenKind::FloatLit => ast::Lit::Float(literal_text.parse().ok()?),
+            TokenKind::FloatLit => ast::Lit::Float(literal_text.parse().map_err(|_| {
+                SyntaxError::FailedToParseLiteral {
+                    token_kind: literal_token.kind,
+                    info: ErrorInfo::new(literal_token.span, self.input),
+                }
+            })?),
             TokenKind::StringLit => ast::Lit::String(
                 // Trim the quotes
                 literal_text[1..(literal_text.len() - 1)].to_string(),
@@ -177,11 +189,11 @@ where
             _ => unreachable!(),
         };
 
-        Some(ast::Expr::Literal(lit))
+        Ok(ast::Expr::Literal(lit))
     }
 
     /// Parse function call arguments parsing function arguments as expressions
-    fn parse_function_call(&mut self, name: String) -> Option<ast::Expr> {
+    fn parse_function_call(&mut self, name: String) -> ExprResult {
         let mut args = Vec::new();
         while !(self.at(TokenKind::RightParen)
             || self.at(TokenKind::Delimiter)
@@ -201,7 +213,7 @@ where
                     expr
                 }
                 TokenKind::Ident => {
-                    let ident_token = self.next()?;
+                    let ident_token = self.next().unwrap();
                     ast::Expr::Ident(self.text(ident_token).to_string())
                 }
                 lit @ TokenKind::StringLit
@@ -211,17 +223,17 @@ where
             });
         }
 
-        Some(ast::Expr::FnCall { name, args })
+        Ok(ast::Expr::FnCall { name, args })
     }
 
     /// Parse identifier or function call
-    fn parse_identifier(&mut self) -> Option<ast::Expr> {
+    fn parse_identifier(&mut self) -> ExprResult {
         let name = {
-            let ident_token = self.next()?;
+            let ident_token = self.next().unwrap();
             self.text(ident_token).to_string()
         };
 
-        Some(
+        Ok(
             // If any of the following appear as the next token
             // then it must be a function call with a function argument following it
             match self.peek() {
@@ -236,14 +248,14 @@ where
     }
 
     /// Parse if(+else) expression
-    fn parse_if_expr(&mut self) -> Option<ast::Expr> {
+    fn parse_if_expr(&mut self) -> ExprResult {
         self.consume(TokenKind::If)?;
         let cond = Box::new(self.expression()?);
         self.consume(TokenKind::Then)?;
         let true_value = Box::new(self.expression()?);
         self.consume(TokenKind::Else)?;
         let false_value = Box::new(self.expression()?);
-        Some(ast::Expr::If {
+        Ok(ast::Expr::If {
             cond,
             true_value,
             false_value,
@@ -251,7 +263,7 @@ where
     }
 
     /// Parse match expression
-    fn parse_match_expr(&mut self) -> Option<ast::Expr> {
+    fn parse_match_expr(&mut self) -> ExprResult {
         self.consume(TokenKind::Match)?;
         let expr = Box::new(self.expression()?);
 
@@ -269,29 +281,27 @@ where
         }
 
         self.consume(TokenKind::End)?;
-        Some(ast::Expr::Match { expr, arms })
+        Ok(ast::Expr::Match { expr, arms })
     }
 
     /// Parse block expression
-    pub(crate) fn parse_block_expr(&mut self) -> Option<ast::Expr> {
+    pub(crate) fn parse_block_expr(&mut self) -> ExprResult {
         self.consume(TokenKind::Begin)?;
 
         let mut stmts = Vec::new();
-        while let Some(stmt) = self.parse_statement() {
+        while self.is_statement() {
+            let stmt = self.parse_statement()?;
             stmts.push(stmt);
         }
 
-        let expr = self.expression().map(|e| Box::new(e));
-        Some(ast::Expr::Block { stmts, expr })
-    }
+        let expr = self.expression().map(Box::new).ok();
 
-    /// Parse expression
-    pub fn expression(&mut self) -> Option<ast::Expr> {
-        self.parse_expression(0)
+        self.consume(TokenKind::End)?;
+        Ok(ast::Expr::Block { stmts, expr })
     }
 
     /// No special AST node, just influences the structure by evaluating the expression within the parens first
-    fn parse_grouping(&mut self) -> Option<ast::Expr> {
+    fn parse_grouping(&mut self) -> ExprResult {
         self.consume(TokenKind::LeftParen)?;
         let expr = self.parse_expression(0);
         self.consume(TokenKind::RightParen)?;
@@ -299,11 +309,23 @@ where
     }
 
     /// Parse prefix operation
-    fn parse_prefix_op(&mut self, op: TokenKind) -> Option<ast::Expr> {
-        self.consume(op);
-        let ((), right_binding_power) = op.prefix_binding_power()?;
+    fn parse_prefix_op(&mut self, op: TokenKind) -> ExprResult {
+        let token = self.next().unwrap();
+
+        let ((), right_binding_power) =
+            op.prefix_binding_power()
+                .ok_or(SyntaxError::UnexpectedToken {
+                    expected: r#""-" or "!""#.to_string(),
+                    token_kind: op,
+                    info: ErrorInfo::new(token.span, self.input),
+                })?;
         let expr = Box::new(self.parse_expression(right_binding_power)?);
-        Some(ast::Expr::PrefixOp { op, expr })
+        Ok(ast::Expr::PrefixOp { op, expr })
+    }
+
+    /// Parse expression
+    pub fn expression(&mut self) -> ExprResult {
+        self.parse_expression(0)
     }
 }
 
@@ -314,12 +336,20 @@ mod tests {
     macro_rules! assert_expr {
         ($sample:expr, $sexpr:expr) => {
             let test = $sample;
-            let expr = Parser::new(test).expression().unwrap();
-            println!(
-                "Sample: \"{}\"\nGot:    {}\nWanted: {}",
-                $sample, expr, $sexpr
-            );
-            assert_eq!(expr.to_string(), $sexpr)
+            println!("Sample: '{}'", $sample);
+            match Parser::new(test).expression() {
+                Ok(expr) => {
+                    println!(
+                        "Sample: \"{}\"\nGot:    {}\nWanted: {}",
+                        $sample, expr, $sexpr
+                    );
+                    assert_eq!(expr.to_string(), $sexpr)
+                }
+                Err(err) => {
+                    eprintln!("{:#?}", err);
+                    assert!(false)
+                }
+            }
         };
     }
 
@@ -362,9 +392,9 @@ mod tests {
         assert_expr!(
             r#"
 match x
-  | 1 => 69
+  | 1    => 69
   | 2, 3 => 420
-  | _ => x * x * x
+  | _    => x * x * x
 end"#,
             "(match x (1 69) ((2 3) 420) (_ (* (* x x) x)))"
         );

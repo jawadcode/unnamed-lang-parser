@@ -1,20 +1,55 @@
-use crate::lexer::{Span, Token, TokenKind};
+use crate::lexer::{Span, TokenKind};
 use std::fmt;
 
-pub struct Error {
-    pub expected: TokenKind,
-    pub token: Token,
-    /// 0-based
+pub enum SyntaxError {
+    UnexpectedToken {
+        expected: String,
+        token_kind: TokenKind,
+        info: ErrorInfo,
+    },
+    FailedToParseLiteral {
+        token_kind: TokenKind,
+        info: ErrorInfo,
+    },
+    UnexpectedEndOfInput {
+        info: ErrorInfo,
+    },
+}
+
+impl fmt::Debug for SyntaxError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{}",
+            match self {
+                Self::UnexpectedToken {
+                    expected,
+                    token_kind,
+                    info,
+                } => format!(
+                    "{}\x1b[1;31mUnexpected {}, expected {}\x1b[0;0m",
+                    info, token_kind, expected
+                ),
+                Self::FailedToParseLiteral { token_kind, info } =>
+                    format!("{}\x1b[1;31mFailed to parse {}\x1b[0;0m", info, token_kind),
+                Self::UnexpectedEndOfInput { info } =>
+                    format!("{}\x1b[1;31mUnexpected end of input\x1b[0;0m", info),
+            }
+        )
+    }
+}
+
+pub struct ErrorInfo {
+    pub span: Span,
     pub line: usize,
-    /// 0-based
     pub column: usize,
     pub prev_line: Option<String>,
     pub curr_line: String,
 }
 
-impl Error {
-    pub fn new(expected: TokenKind, token: Token, input: &str) -> Self {
-        let (line, column) = token.get_line_and_column(input);
+impl ErrorInfo {
+    pub fn new(span: Span, input: &str) -> Self {
+        let (line, column) = span.get_line_and_column(input);
         let mut lines = input.lines();
         let prev_line = if line > 0 {
             lines.nth(line - 1).map(ToOwned::to_owned)
@@ -24,8 +59,7 @@ impl Error {
         let curr_line = lines.next().unwrap().to_owned();
 
         Self {
-            expected,
-            token,
+            span,
             line,
             column,
             prev_line,
@@ -34,7 +68,7 @@ impl Error {
     }
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for ErrorInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let line = self.line + 1;
         let column = self.column + 1;
@@ -61,9 +95,8 @@ impl fmt::Display for Error {
             f,
             "{}{}",
             " ".repeat(width_of_num + column - 1),
-            "^".repeat(self.token.len())
-        )?;
-        writeln!(f, "Unexpected {}, expected {}", self.token, self.expected)
+            "^".repeat((self.span.end - self.span.start) as usize)
+        )
     }
 }
 
@@ -76,14 +109,10 @@ fn printerr() {
 end",
         "\n".repeat(100)
     );
-    let err = Error::new(
-        TokenKind::Assign,
-        Token {
-            kind: TokenKind::Minus,
-            span: Span {
-                start: 138,
-                end: 139,
-            },
+    let err = ErrorInfo::new(
+        Span {
+            start: 138,
+            end: 139,
         },
         test.as_str(),
     );
