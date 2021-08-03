@@ -4,6 +4,7 @@ use crate::lexer::TokenKind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lit {
+    Bool(bool),
     Int(usize),
     Float(f64),
     String(String),
@@ -12,6 +13,7 @@ pub enum Lit {
 impl fmt::Display for Lit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Lit::Bool(b) => write!(f, "{}", b),
             Lit::Int(i) => write!(f, "{}", i),
             Lit::Float(fl) => write!(f, "{}", fl),
             Lit::String(s) => write!(f, r#""{}""#, s),

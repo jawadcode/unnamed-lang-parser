@@ -58,9 +58,11 @@ where
 {
     pub fn parse_expression(&mut self, binding_power: u8) -> ExprResult {
         let mut lhs = match self.peek() {
-            lit @ TokenKind::IntLit | lit @ TokenKind::FloatLit | lit @ TokenKind::StringLit => {
-                self.parse_literal(lit)?
-            }
+            lit @ TokenKind::True
+            | lit @ TokenKind::False
+            | lit @ TokenKind::IntLit
+            | lit @ TokenKind::FloatLit
+            | lit @ TokenKind::StringLit => self.parse_literal(lit)?,
 
             TokenKind::Ident => self.parse_identifier()?,
 
@@ -167,6 +169,8 @@ where
         let literal_text = self.text(literal_token);
 
         let lit = match lit {
+            TokenKind::True => ast::Lit::Bool(true),
+            TokenKind::False => ast::Lit::Bool(false),
             TokenKind::IntLit => ast::Lit::Int(
                 literal_text
                     // Laziness at its peak:
@@ -341,7 +345,7 @@ mod tests {
                 Ok(expr) => {
                     println!(
                         "Sample: \"{}\"\nGot:    {}\nWanted: {}",
-                        $sample, expr, $sexpr
+                        $sample, $sexpr, expr
                     );
                     assert_eq!(expr.to_string(), $sexpr)
                 }
@@ -351,6 +355,14 @@ mod tests {
                 }
             }
         };
+    }
+
+    #[test]
+    fn parse_bool_expr() {
+        assert_expr!(
+            "!true || 10 < 6 && 2 != 1",
+            "(or (! true) (and (< 10 6) (!= 2 1)))"
+        );
     }
 
     #[test]

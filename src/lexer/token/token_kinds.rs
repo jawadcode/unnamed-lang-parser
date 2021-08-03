@@ -13,6 +13,8 @@ pub enum TokenKind {
     Begin,
     End,
     Ident,
+    True,
+    False,
     IntLit,
     FloatLit,
     StringLit,
@@ -71,6 +73,12 @@ pub enum LogosToken {
 
     #[regex(r#"([A-Za-z]|_)([A-Za-z]|_|\d)*"#)]
     Ident,
+
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
 
     #[regex("[0-9]+", priority = 2)]
     IntLit,
@@ -168,10 +176,12 @@ impl fmt::Display for TokenKind {
                 TokenKind::Match => "match",
                 TokenKind::Begin => "begin",
                 TokenKind::End => "end",
-                TokenKind::Ident => "Identifier",
-                TokenKind::IntLit => "Integer Literal",
-                TokenKind::FloatLit => "Float Literal",
-                TokenKind::StringLit => "String Literal",
+                TokenKind::Ident => "identifier",
+                TokenKind::True => "true",
+                TokenKind::False => "false",
+                TokenKind::IntLit => "integer literal",
+                TokenKind::FloatLit => "float literal",
+                TokenKind::StringLit => "string literal",
                 TokenKind::Plus => "+",
                 TokenKind::Minus => "-",
                 TokenKind::Multiply => "*",
@@ -179,8 +189,8 @@ impl fmt::Display for TokenKind {
                 TokenKind::Less => "<",
                 TokenKind::Greater => ">",
                 TokenKind::LogicalNot => "!",
-                TokenKind::LogicalAnd => "&&",
-                TokenKind::LogicalOr => "||",
+                TokenKind::LogicalAnd => "and",
+                TokenKind::LogicalOr => "or",
                 TokenKind::LessEq => "<=",
                 TokenKind::GreaterEq => ">=",
                 TokenKind::NotEq => "!=",
@@ -193,8 +203,8 @@ impl fmt::Display for TokenKind {
                 TokenKind::FatArrow => "=>",
                 TokenKind::Comma => ",",
                 TokenKind::Delimiter => ";",
-                TokenKind::Comment => "Comment",
-                TokenKind::Whitespace => "Whitespace",
+                TokenKind::Comment => "comment",
+                TokenKind::Whitespace => "whitespace",
                 TokenKind::Error => "<?>",
                 TokenKind::EOF => "EOF",
             }
@@ -214,6 +224,8 @@ impl LogosToken {
             LogosToken::Begin => TokenKind::Begin,
             LogosToken::End => TokenKind::End,
             LogosToken::Ident => TokenKind::Ident,
+            LogosToken::True => TokenKind::True,
+            LogosToken::False => TokenKind::False,
             LogosToken::IntLit => TokenKind::IntLit,
             LogosToken::FloatLit => TokenKind::FloatLit,
             LogosToken::StringLit => TokenKind::StringLit,

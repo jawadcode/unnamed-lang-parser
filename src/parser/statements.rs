@@ -67,7 +67,7 @@ mod tests {
                 Ok(stmt) => {
                     println!(
                         "Sample: \"{}\"\nGot:    {}\nWanted: {}",
-                        $sample, stmt, $sexpr
+                        $sample, $sexpr, stmt
                     );
                     assert_eq!(stmt.to_string(), $sexpr)
                 }
